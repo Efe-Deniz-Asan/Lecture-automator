@@ -1,6 +1,6 @@
 # Lecture Automator
 
-An automated system that generates lecture transcripts, summaries, asks reinforcing questions, and captures board content using Computer Vision and Audio Processing.
+An automated system that generates lecture transcripts, summaries, asks reinforcing questions,gives recommendations on reading matterials associated with the lecture, and captures board content using Computer Vision and Audio Processing.
 
 ## Features
 - **Smart Board Capture**: Uses Neon Tape ROI detection and Person Detection (YOLOv8) to capture the board only when the teacher moves away.
