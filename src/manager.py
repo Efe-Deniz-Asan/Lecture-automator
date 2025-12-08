@@ -130,7 +130,7 @@ class LectureManager:
                 # --- State Handling ---
                 if not recording_active:
                     # WAITING STATE
-                    cv2.putText(frame, "READY: Press 'r' to Start", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+                    cv2.putText(frame, "READY: 'r' start | 'l' lock teacher | 'q' quit", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
                     
                 else:
                     # RECORDING STATE
@@ -204,6 +204,21 @@ class LectureManager:
                     print("Manual Snapshot Triggered!")
                     for idx, monitor in enumerate(self.board_monitors):
                         self._save_snapshot(frame, idx, monitor)
+
+                elif key == ord('l'):
+                    # Lock onto current detected teacher
+                    # We need to run detection once here to get the box if not recording
+                    board_rois = [(m.x, m.y, m.w, m.h) for m in self.board_monitors]
+                    teacher_box = self.teacher_detector.detect_teacher(frame, board_rois)
+                    
+                    if teacher_box:
+                        success = self.teacher_detector.set_reference_teacher(frame, teacher_box)
+                        if success:
+                            print(f"TEACHER LOCKED! (ID + Visual Memory). Tracking ID #{self.teacher_detector.locked_id}.")
+                        else:
+                             print("Lock Failed: Could not match ID.")
+                    else:
+                        print("Cannot lock: No teacher detected.")
                 
         except Exception as e:
             import traceback

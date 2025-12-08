@@ -16,8 +16,8 @@ if exist ".venv\Scripts\activate.bat" (
 :: 2. Run Recording Command (Infinite Loop for Reliability)
 :: If the app crashes (Camera disconnected?), it waits 5 seconds and restarts.
 :loop
-echo Running with Audio Device ID 1 (Realtek), Red Chalk, and Hybrid Vision...
-python lecture_automator.py record --audio-device 1 --color chalk-red --use-yolo
+echo Running with Configured Audio Device, Red Chalk, and Hybrid Vision...
+python lecture_automator.py record --color chalk-red --use-yolo
 
 echo.
 echo WARNING: App crashed or stopped. Restarting in 5 seconds...

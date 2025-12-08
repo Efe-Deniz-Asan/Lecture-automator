@@ -136,7 +136,18 @@ def main():
                 target_dir = os.path.join(root_dir, folder_name)
                 print(f"Auto-Detected Session Mode: Saving to '{target_dir}'")
             
-            manager = LectureManager(output_dir=target_dir, color_mode=args.color, audio_device_index=args.audio_device, use_yolo=args.use_yolo)
+            # Resolve Audio Device
+            audio_id = args.audio_device
+            if audio_id is None:
+                env_id = os.getenv("AUDIO_DEVICE_ID")
+                if env_id and env_id.strip():
+                    try:
+                        audio_id = int(env_id)
+                        print(f"Using Audio Device from .env: {audio_id}")
+                    except ValueError:
+                        print(f"Warning: Invalid AUDIO_DEVICE_ID in .env: {env_id}")
+            
+            manager = LectureManager(output_dir=target_dir, color_mode=args.color, audio_device_index=audio_id, use_yolo=args.use_yolo)
             
             if manager.calibrate_rois(frame_source=camera_source):
                 manager.start_session(frame_source=camera_source)

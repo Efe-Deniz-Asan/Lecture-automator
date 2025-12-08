@@ -131,45 +131,152 @@ class ROIDetector:
 class TeacherDetector:
     def __init__(self, model_path="yolov8n.pt"):
         self.model = YOLO(model_path)
+        self.locked_id = None # ID of the tracked teacher
+        self.ref_hist = None  # Visual Memory (Histogram)
+        self.missing_frames = 0
         
+    def set_reference_teacher(self, frame, box):
+        """
+        Locks onto the ID AND Appearance of the person closest to the provided box.
+        """
+        # We need to run tracking on this frame to get IDs
+        results = self.model.track(frame, verbose=False, classes=[0], persist=True)
+        
+        target_cx = (box[0] + box[2]) / 2
+        target_cy = (box[1] + box[3]) / 2
+        
+        best_id = None
+        best_box = None
+        min_dist = float('inf')
+        
+        for result in results:
+            if not result.boxes or not result.boxes.id: continue
+            
+            ids = result.boxes.id.int().cpu().tolist()
+            boxes = result.boxes.xyxy.cpu().tolist()
+            
+            for i, b in enumerate(boxes):
+                cx = (b[0] + b[2]) / 2
+                cy = (b[1] + b[3]) / 2
+                dist = np.sqrt((cx - target_cx)**2 + (cy - target_cy)**2)
+                
+                if dist < min_dist:
+                    min_dist = dist
+                    best_id = ids[i]
+                    best_box = map(int, b)
+        
+        if min_dist < 200 and best_box is not None:
+            self.locked_id = best_id
+            self.missing_frames = 0
+            
+            # --- CAPTURE VISUAL MEMORY ---
+            bx1, by1, bx2, by2 = best_box
+            person_roi = frame[by1:by2, bx1:bx2]
+            if person_roi.size > 0:
+                 hsv_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2HSV)
+                 hist = cv2.calcHist([hsv_roi], [0, 1], None, [30, 32], [0, 180, 0, 256])
+                 cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
+                 self.ref_hist = hist
+                 print(f"Teacher Locked! ID: #{self.locked_id} | Visual Memory: Saved")
+            else:
+                 print(f"Teacher Locked! ID: #{self.locked_id} | Visual Memory: FAILED (Empty ROI)")
+            
+            return True
+        else:
+            print("Failed to match Teacher ID.")
+            return False
+
     def detect_teacher(self, frame, board_rois=None):
         """
         Returns bounding box [x1, y1, x2, y2] of the teacher.
-        Prioritizes people overlapping with or closest to the boards.
-        Fallback: Largest person in the 'stage area' (top 80% of frame).
+        Uses model.track() to maintain ID across frames.
         """
-        results = self.model(frame, verbose=False, classes=[0]) # class 0 is person
+        # Run Tracking
+        results = self.model.track(frame, verbose=False, classes=[0], persist=True)
         
         candidates = []
         for result in results:
-            for box in result.boxes:
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
+            if not result.boxes: continue
+            
+            if result.boxes.id is not None:
+                ids = result.boxes.id.int().cpu().tolist()
+            else:
+                ids = [-1] * len(result.boxes)
+            
+            boxes = result.boxes.xyxy.cpu().tolist()
+            for i, box in enumerate(boxes):
+                x1, y1, x2, y2 = map(int, box)
                 w = x2 - x1
                 h = y2 - y1
                 area = w * h
-                candidates.append((x1, y1, x2, y2, area))
+                tid = ids[i]
+                candidates.append((x1, y1, x2, y2, area, tid))
         
-        if not candidates:
+        # --- MODE 1: ID LOCK ---
+        if self.locked_id is not None:
+            for cand in candidates:
+                if cand[5] == self.locked_id:
+                    self.missing_frames = 0 # Reset counter
+                    return cand[:4]
+            
+            # Locked ID not found
+            self.missing_frames += 1
+            if self.missing_frames > 150: # 5s lost
+                print(f"Teacher #{self.locked_id} lost. Switching to VISUAL SEARCH.")
+                self.locked_id = None
+                self.missing_frames = 0
+                # Fall through to Visual Search (ref_hist is still set)
+            else:
+                return None # Waiting for ID to return
+        
+        # --- MODE 2: VISUAL SEARCH (Re-Acquire) ---
+        if self.ref_hist is not None:
+            # We have a memory, but no active ID. Look for a visual match.
+            best_person = None
+            max_similarity = -1.0
+            best_id_match = None
+            
+            for person in candidates:
+                px1, py1, px2, py2, p_area, pid = person
+                if p_area < 2000: continue
+                
+                cand_roi = frame[py1:py2, px1:px2]
+                if cand_roi.size == 0: continue
+                
+                hsv_cand = cv2.cvtColor(cand_roi, cv2.COLOR_BGR2HSV)
+                cand_hist = cv2.calcHist([hsv_cand], [0, 1], None, [30, 32], [0, 180, 0, 256])
+                cv2.normalize(cand_hist, cand_hist, 0, 255, cv2.NORM_MINMAX)
+                
+                similarity = cv2.compareHist(self.ref_hist, cand_hist, cv2.HISTCMP_CORREL)
+                
+                if similarity > max_similarity:
+                    max_similarity = similarity
+                    best_person = (px1, py1, px2, py2)
+                    best_id_match = pid
+            
+            if max_similarity > 0.5: # Strict visual match
+                print(f"Teacher RE-IDENTIFIED! New ID: #{best_id_match} (Sim: {max_similarity:.2f})")
+                self.locked_id = best_id_match
+                return best_person
+            
+            # If we have a memory but no match, DO NOT FALLBACK to spatial.
+            # We want to ignore students walking by until the REAL teacher returns.
             return None
             
-        # If we have boards known, use them to filter
+        # --- MODE 2: SPATIAL HEURISTIC (Default) ---
+        if not candidates: return None
+
         if board_rois and len(board_rois) > 0:
             best_person = None
             min_dist_score = float('inf')
             
-            # Calculate average board Y (height level of the stage)
             board_centers_y = [b[1] + b[3]/2 for b in board_rois]
             avg_board_y = sum(board_centers_y) / len(board_centers_y)
             
-            # Union of board X ranges (the "Stage Width")
-            # We can use simple distance to NEAREST board
-            
             for person in candidates:
-                px1, py1, px2, py2, p_area = person
+                px1, py1, px2, py2, p_area, tid = person
                 p_cy = py1 + (py2 - py1) / 2
-                p_cx = px1 + (px2 - px1) / 2
                 
-                # Check Intersection first
                 total_intersection = 0
                 for (bx, by, bw, bh) in board_rois:
                     ix = max(px1, bx)
@@ -179,22 +286,12 @@ class TeacherDetector:
                     if iw > 0 and ih > 0:
                         total_intersection += (iw * ih)
                 
-                # Metric 1: Intersection (Higher is better)
-                # Metric 2: Vertical Distance to Board Center (Lower is better)
-                # We invert Intersection to make it a minimization problem or handle separately
-                
                 if total_intersection > 0:
-                    # Very strong candidate (Teacher is WRITING)
-                    # Score = -Intersection (to prioritize large overlap)
                     score = -total_intersection 
                 else:
-                    # Not touching board. Check distance.
-                    # Teacher head/center is usually vertically aligned with board center
-                    # Students are usually much lower (higher Y value)
                     dist_y = abs(p_cy - avg_board_y)
                     score = dist_y
                 
-                # Simple Update
                 if score < min_dist_score:
                     min_dist_score = score
                     best_person = (px1, py1, px2, py2)
@@ -202,19 +299,15 @@ class TeacherDetector:
             return best_person
             
         else:
-            # No boards calibrated yet? Fallback to Area, but filter bottom junk
-            # Filter out people whose center is in the bottom 15% of frame
+            # Fallback: Largest + Central
             frame_h = frame.shape[0]
             valid_candidates = []
             for p in candidates:
                 cy = p[1] + (p[3] - p[1]) / 2
-                if cy < frame_h * 0.85: # Ignore if center is very low
+                if cy < frame_h * 0.85: 
                     valid_candidates.append(p)
             
             if not valid_candidates: return None
-            
-            # Return largest of the valid ones
-            # item 4 is area
             valid_candidates.sort(key=lambda x: x[4], reverse=True)
             return valid_candidates[0][:4]
 
