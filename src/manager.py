@@ -146,8 +146,9 @@ class LectureManager:
                             cv2.circle(frame, (30, 30), 10, (0, 0, 255), -1)
                         cv2.putText(frame, "REC", (50, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-                        # 2. Detect Teacher
-                        teacher_box = self.teacher_detector.detect_teacher(frame)
+                        # 2. Detect Teacher (Prioritize those near boards)
+                        board_rois = [(m.x, m.y, m.w, m.h) for m in self.board_monitors]
+                        teacher_box = self.teacher_detector.detect_teacher(frame, board_rois)
                         
                         # 3. Update Boards
                         for idx, monitor in enumerate(self.board_monitors):

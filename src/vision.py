@@ -132,26 +132,91 @@ class TeacherDetector:
     def __init__(self, model_path="yolov8n.pt"):
         self.model = YOLO(model_path)
         
-    def detect_teacher(self, frame):
+    def detect_teacher(self, frame, board_rois=None):
         """
-        Returns bounding box [x1, y1, x2, y2] of the teacher (person detection).
-        Assumes the largest person in frame is the teacher if multiple detected.
+        Returns bounding box [x1, y1, x2, y2] of the teacher.
+        Prioritizes people overlapping with or closest to the boards.
+        Fallback: Largest person in the 'stage area' (top 80% of frame).
         """
         results = self.model(frame, verbose=False, classes=[0]) # class 0 is person
         
-        teacher_box = None
-        max_area = 0
-        
+        candidates = []
         for result in results:
             for box in result.boxes:
                 x1, y1, x2, y2 = map(int, box.xyxy[0])
-                area = (x2 - x1) * (y2 - y1)
+                w = x2 - x1
+                h = y2 - y1
+                area = w * h
+                candidates.append((x1, y1, x2, y2, area))
+        
+        if not candidates:
+            return None
+            
+        # If we have boards known, use them to filter
+        if board_rois and len(board_rois) > 0:
+            best_person = None
+            min_dist_score = float('inf')
+            
+            # Calculate average board Y (height level of the stage)
+            board_centers_y = [b[1] + b[3]/2 for b in board_rois]
+            avg_board_y = sum(board_centers_y) / len(board_centers_y)
+            
+            # Union of board X ranges (the "Stage Width")
+            # We can use simple distance to NEAREST board
+            
+            for person in candidates:
+                px1, py1, px2, py2, p_area = person
+                p_cy = py1 + (py2 - py1) / 2
+                p_cx = px1 + (px2 - px1) / 2
                 
-                if area > max_area:
-                    max_area = area
-                    teacher_box = (x1, y1, x2, y2)
-                    
-        return teacher_box
+                # Check Intersection first
+                total_intersection = 0
+                for (bx, by, bw, bh) in board_rois:
+                    ix = max(px1, bx)
+                    iy = max(py1, by)
+                    iw = min(px2, bx+bw) - ix
+                    ih = min(py2, by+bh) - iy
+                    if iw > 0 and ih > 0:
+                        total_intersection += (iw * ih)
+                
+                # Metric 1: Intersection (Higher is better)
+                # Metric 2: Vertical Distance to Board Center (Lower is better)
+                # We invert Intersection to make it a minimization problem or handle separately
+                
+                if total_intersection > 0:
+                    # Very strong candidate (Teacher is WRITING)
+                    # Score = -Intersection (to prioritize large overlap)
+                    score = -total_intersection 
+                else:
+                    # Not touching board. Check distance.
+                    # Teacher head/center is usually vertically aligned with board center
+                    # Students are usually much lower (higher Y value)
+                    dist_y = abs(p_cy - avg_board_y)
+                    score = dist_y
+                
+                # Simple Update
+                if score < min_dist_score:
+                    min_dist_score = score
+                    best_person = (px1, py1, px2, py2)
+            
+            return best_person
+            
+        else:
+            # No boards calibrated yet? Fallback to Area, but filter bottom junk
+            # Filter out people whose center is in the bottom 15% of frame
+            frame_h = frame.shape[0]
+            valid_candidates = []
+            for p in candidates:
+                cy = p[1] + (p[3] - p[1]) / 2
+                if cy < frame_h * 0.85: # Ignore if center is very low
+                    valid_candidates.append(p)
+            
+            if not valid_candidates: return None
+            
+            # Return largest of the valid ones
+            # item 4 is area
+            valid_candidates.sort(key=lambda x: x[4], reverse=True)
+            return valid_candidates[0][:4]
 
 class BoardMonitor:
     def __init__(self, board_roi):

@@ -6,3 +6,4 @@ pyaudio
 ultralytics
 pydantic
 numpy
+python-dotenv

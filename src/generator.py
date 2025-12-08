@@ -5,7 +5,8 @@ from openai import OpenAI
 import PIL.Image
 
 class ContentGenerator:
-    def __init__(self, output_dir="output", model_size="base", openai_key=None, gemini_key=None, language=None, skip_transcription=False):
+    def __init__(self, output_dir="output", model_size="base", device="auto", compute_type="default",
+                 openai_key=None, gemini_key=None, language=None, skip_transcription=False):
         self.output_dir = output_dir
         self.manifest_path = os.path.join(output_dir, "manifest.json")
         self.audio_path = os.path.join(output_dir, "master_audio.wav")
@@ -35,9 +36,8 @@ class ContentGenerator:
             print("Gemini API Key detected. Model: Gemini 2.0 Flash Exp (No Search)")
 
         if not self.skip_transcription:
-             print(f"Loading Faster-Whisper model: {model_size} (Int8)...")
-             # Run on CPU with Int8 quantization for speed
-             self.whisper_model = WhisperModel(model_size, device="cpu", compute_type="int8")
+             print(f"Loading Faster-Whisper model: {model_size} on {device} ({compute_type})...")
+             self.whisper_model = WhisperModel(model_size, device=device, compute_type=compute_type)
         else:
              print("Skipping Whisper model load (Gen-Only Mode).")
             

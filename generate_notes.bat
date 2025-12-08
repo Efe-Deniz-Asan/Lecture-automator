@@ -13,9 +13,9 @@ if exist ".venv\Scripts\activate.bat" (
 
 :: 2. Run Generation Command
 :: Auto-detects language and uses your Gemini Key. 
-:: Switched to 'small' model. Faster-Whisper makes this fast enough!
+:: Switched to 'turbo' model (Fast & Accurate) and Auto-Device (GPU if available).
 echo Generating Study Guide (Auto-Language) for LATEST Lecture...
-python lecture_automator.py generate --model small --latest
+python lecture_automator.py generate --model turbo --device auto --latest
 
 echo.
 echo ===============================================

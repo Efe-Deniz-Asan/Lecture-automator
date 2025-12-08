@@ -34,6 +34,10 @@ from src.manager import LectureManager
 from src.generator import ContentGenerator
 
 def main():
+    # AUTO-FIX: Load .env file for API Keys
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     # AUTO-FIX: Add FFmpeg to PATH if missing (Common issue with Winget installs needing restart)
     import shutil
     import os
@@ -68,7 +72,9 @@ def main():
     # Generate Command
     parser_gen = subparsers.add_parser("generate", help="Generate transcript and study materials from recorded session")
     parser_gen.add_argument("--output", type=str, default="output", help="Output directory containing manifest.json")
-    parser_gen.add_argument("--model", type=str, default="base", help="Whisper model size (tiny, base, small, medium, large)")
+    parser_gen.add_argument("--model", type=str, default="turbo", help="Whisper model size (tiny, base, small, medium, large-v3, turbo)")
+    parser_gen.add_argument("--device", type=str, default="auto", choices=["auto", "cpu", "cuda"], help="Device to use for inference (default: auto)")
+    parser_gen.add_argument("--compute-type", type=str, default="default", help="Compute type (default, float16, int8_float16, int8)")
     parser_gen.add_argument("--language", type=str, default=None, help="Language code (default: Auto-detect)")
     parser_gen.add_argument("--openai-key", type=str, help="OpenAI API Key for Summary/Questions")
     parser_gen.add_argument("--gemini-key", type=str, help="Google Gemini API Key for Summary/Questions")
@@ -158,6 +164,7 @@ def main():
                          sys.exit(1)
 
             generator = ContentGenerator(output_dir=target_dir, model_size=args.model, 
+                                         device=args.device, compute_type=args.compute_type,
                                          openai_key=args.openai_key, gemini_key=args.gemini_key,
                                          language=args.language, skip_transcription=args.skip_transcription)
             generator.process_session()
