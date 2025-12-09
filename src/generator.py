@@ -3,6 +3,8 @@ import os
 from faster_whisper import WhisperModel
 from openai import OpenAI
 import PIL.Image
+from src.ocr import BoardOCR
+from src.config import config
 
 class ContentGenerator:
     def __init__(self, output_dir="output", model_size="base", device="auto", compute_type="default",
@@ -43,6 +45,17 @@ class ContentGenerator:
             
         if not self.openai_key and not self.gemini_key:
             print("WARNING: No API keys.")
+        
+        # Initialize OCR if enabled
+        self.ocr = None
+        if config.ocr.enabled:
+            try:
+                print("Initializing OCR for board text and equation extraction...")
+                self.ocr = BoardOCR()
+                print("OCR initialized successfully")
+            except Exception as e:
+                print(f"Warning: OCR initialization failed: {e}")
+                print("Continuing without OCR (Gemini will still process images)")
 
     def process_session(self):
         if not os.path.exists(self.manifest_path):
@@ -199,14 +212,48 @@ class ContentGenerator:
             try:
                 img = PIL.Image.open(img_path)
                 
-                prompt = """
-                Analyze this whiteboard image. 
-                Transcribe all handwritten text, formulas, and diagrams into LaTeX and Markdown.
-                - Use $...$ for inline math.
-                - Use $$...$$ for block math.
-                - If there is a diagram, describe it briefly in [italics].
-                - Do not add conversational filler, just give the content.
-                """
+                # Step 1: Try OCR extraction if available
+                ocr_data = None
+                if self.ocr:
+                    try:
+                        print(f"    Running OCR on {img_filename}...")
+                        ocr_data = self.ocr.process_board_image(img_path)
+                        if ocr_data and ocr_data.get('equations'):
+                            print(f"    Extracted {len(ocr_data['equations'])} equations via OCR")
+                    except Exception as e:
+                        print(f"    OCR warning: {e}")
+                
+                # Step 2: Build enhanced prompt with OCR data
+                if ocr_data and (ocr_data.get('text') or ocr_data.get('equations')):
+                    # OCR found content - give Gemini structured data
+                    prompt = f"""
+                    Analyze this whiteboard image. OCR has extracted the following:
+                    
+                    TEXT CONTENT:
+                    {ocr_data.get('text', 'N/A')}
+                    
+                    EQUATIONS (LaTeX):
+                    {chr(10).join(['$$' + eq + '$$' for eq in ocr_data.get('equations', [])])}
+                    
+                    Your task:
+                    1. Verify the OCR extraction is correct (fix any errors)
+                    2. Add any missing content from the image
+                    3. Provide context and explanations for the equations
+                    4. Format everything in clean Markdown with LaTeX
+                    
+                    Use $...$ for inline math, $$...$$ for block math.
+                    If there are diagrams, describe them in [italics].
+                    """
+                else:
+                    # No OCR or OCR failed - standard prompt
+                    prompt = """
+                    Analyze this whiteboard image. 
+                    Transcribe all handwritten text, formulas, and diagrams into LaTeX and Markdown.
+                    - Use $...$ for inline math.
+                    - Use $$...$$ for block math.
+                    - If there is a diagram, describe it briefly in [italics].
+                    - Do not add conversational filler, just give the content.
+                    """
                 
                 response = self.gemini_model.generate_content([prompt, img])
                 transcription = response.text
