@@ -9,6 +9,10 @@ __version__ = "2.0.0"
 logger = get_logger(__name__)
 
 def main():
+    # AUTO-FIX: Load .env file for API Keys
+    from dotenv import load_dotenv
+    load_dotenv()
+    
     # Display version
     logger.info(f"Lecture Automator v{__version__}")
     logger.info(f"Configuration loaded from: config.yaml")
@@ -22,40 +26,6 @@ def main():
         possible_path = os.path.join(local_app_data, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe", "ffmpeg-8.0.1-full_build", "bin")
         if os.path.exists(possible_path):
              logger.debug(f"Found FFmpeg locally at {possible_path}. Adding to PATH.")
-             os.environ["PATH"] += os.pathsep + possible_path
-
-    parser = argparse.ArgumentParser(description="Lecture Automator CLI")
-    subparsers = parser.add_subparsers(dest="command", help="Available commands")
-    
-    # Calibrate Command
-    parser_calib = subparsers.add_parser("calibrate", help="Calibrate ROI Detection using Neon Tape or Chalk")
-    parser_calib.add_argument("--source", type=str, default="0", help="Video source ID (default: 0) or camera name (e.g., 'Logitech Webcam C920')")
-    parser_calib.add_argument("--color", type=str, default="neon-green", choices=["neon-green", "chalk-green", "chalk-blue", "chalk-red"], 
-                              help="Color of the boundary markers (default: neon-green)")
-    parser_calib.add_argument("--use-yolo", action="store_true", help="Enable Hybrid YOLO+Color detection for Boards")
-
-    
-    # Record Command
-    parser_rec = subparsers.add_parser("record", help="Start recording a lecture session")
-import argparse
-import sys
-from src.manager import LectureManager
-from src.generator import ContentGenerator
-
-def main():
-    # AUTO-FIX: Load .env file for API Keys
-    from dotenv import load_dotenv
-    load_dotenv()
-    
-    # AUTO-FIX: Add FFmpeg to PATH if missing (Common issue with Winget installs needing restart)
-    import shutil
-    import os
-    if not shutil.which("ffmpeg"):
-        # Try to find it in the standard Winget location
-        local_app_data = os.environ.get("LOCALAPPDATA", "")
-        possible_path = os.path.join(local_app_data, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe", "ffmpeg-8.0.1-full_build", "bin")
-        if os.path.exists(possible_path):
-             print(f"DEBUG: Found FFmpeg locally at {possible_path}. Adding to PATH.")
              os.environ["PATH"] += os.pathsep + possible_path
 
     parser = argparse.ArgumentParser(description="Lecture Automator CLI")
