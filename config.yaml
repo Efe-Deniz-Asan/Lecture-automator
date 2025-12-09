@@ -57,3 +57,23 @@ logging:
   
   # Number of backup log files to keep
   backup_count: 3
+
+# OCR Settings for Board Text and Equation Extraction
+ocr:
+  # Enable/disable OCR processing
+  enabled: true
+  
+  # OCR engine for equations
+  equation_engine: "pix2tex"  # Options: "pix2tex", "mathpix", "latex-ocr"
+  
+  # Tesseract configuration
+  tesseract_lang: "eng"
+  tesseract_config: "--psm 6"  # Assume uniform block of text
+  
+  # Image preprocessing
+  enhance_contrast: true
+  denoise: true
+  
+  # Performance
+  parallel_workers: 4  # Number of parallel OCR workers
+  cache_results: true  # Cache OCR results to avoid reprocessing

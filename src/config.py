@@ -52,6 +52,18 @@ class LoggingConfig(ConfigSection):
     backup_count: int = 3
 
 
+class OCRConfig(ConfigSection):
+    """OCR configuration for board text and equation extraction"""
+    enabled: bool = True
+    equation_engine: str = "pix2tex"
+    tesseract_lang: str = "eng"
+    tesseract_config: str = "--psm 6"
+    enhance_contrast: bool = True
+    denoise: bool = True
+    parallel_workers: int = 4
+    cache_results: bool = True
+
+
 class Config:
     """Main configuration class"""
     
@@ -77,6 +89,7 @@ class Config:
         self.audio = AudioConfig(data.get('audio', {}))
         self.recording = RecordingConfig(data.get('recording', {}))
         self.logging = LoggingConfig(data.get('logging', {}))
+        self.ocr = OCRConfig(data.get('ocr', {}))
         
         # Update version if available
         if 'version' in data:
