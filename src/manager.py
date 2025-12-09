@@ -39,9 +39,30 @@ class LectureManager:
         Press 'c' to capture calibration.
         """
         cap = cv2.VideoCapture(frame_source)
-        # Default HD/FHD logic might have been here or just default
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        
+        # Try multiple resolutions (highest first)
+        resolutions = [
+            (1920, 1080),  # Full HD
+            (1280, 720),   # HD
+            (640, 480)     # VGA (fallback)
+        ]
+        
+        for width, height in resolutions:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            
+            # Verify it worked
+            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            if actual_w == width and actual_h == height:
+                logger.info(f"Camera resolution set to {width}x{height}")
+                break
+            else:
+                logger.warning(f"Failed to set {width}x{height}, got {actual_w}x{actual_h}")
+        else:
+            # None worked, use whatever we got
+            logger.warning(f"Using default camera resolution: {actual_w}x{actual_h}")
         
         cv2.namedWindow("Calibration", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Calibration", 1920, 1080)
@@ -113,9 +134,30 @@ class LectureManager:
         # self.start_time = time.time()
         
         cap = cv2.VideoCapture(frame_source)
-        # Default HD
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+        
+        # Try multiple resolutions (highest first)
+        resolutions = [
+            (1920, 1080),  # Full HD
+            (1280, 720),   # HD
+            (640, 480)     # VGA (fallback)
+        ]
+        
+        for width, height in resolutions:
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+            
+            # Verify it worked
+            actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+            actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+            
+            if actual_w == width and actual_h == height:
+                logger.info(f"Camera resolution set to {width}x{height}")
+                break
+            else:
+                logger.warning(f"Failed to set {width}x{height}, got {actual_w}x{actual_h}")
+        else:
+            # None worked, use whatever we got
+            logger.warning(f"Using default camera resolution: {actual_w}x{actual_h}")
         
         cv2.namedWindow("Lecture Automator", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Lecture Automator", 1920, 1080)

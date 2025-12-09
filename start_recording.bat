@@ -17,7 +17,7 @@ if exist ".venv\Scripts\activate.bat" (
 :: If the app crashes (Camera disconnected?), it waits 5 seconds and restarts.
 :loop
 echo Running with Configured Audio Device, Red Chalk, and Hybrid Vision...
-py -3.11 lecture_automator.py record --color chalk-red --use-yolo
+python lecture_automator.py record --color chalk-red --use-yolo
 
 echo.
 echo WARNING: App crashed or stopped. Restarting in 5 seconds...

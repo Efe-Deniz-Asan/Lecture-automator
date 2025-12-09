@@ -14,7 +14,7 @@ if exist ".venv\Scripts\activate.bat" (
 :: 2. Run Generation Command with --skip-transcription
 :: Takes existing transcript.txt and just runs Gemini.
 echo Skipping Transcription... Generating Study Guide only (LATEST Lecture)...
-py -3.11 lecture_automator.py generate --skip-transcription --latest
+python lecture_automator.py generate --skip-transcription --latest
 
 echo.
 echo ===============================================
