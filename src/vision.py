@@ -1,18 +1,28 @@
 import cv2
 import numpy as np
 from ultralytics import YOLO
+import torch
+from src.logger import get_logger
+from src.config import config
+
+logger = get_logger(__name__)
 
 class ROIDetector:
     def __init__(self, color_mode="neon-green", use_yolo=False, yolo_model="yolov8n.pt"):
         self.use_yolo = use_yolo
         self.yolo_model = None
         if self.use_yolo:
-             print(f"Loading YOLO model for Board Detection: {yolo_model}")
+             logger.info(f"Loading YOLO model for Board Detection: {yolo_model}")
              try:
                 self.yolo_model = YOLO(yolo_model)
              except Exception as e:
-                print(f"WARNING: Failed to load YOLO model: {e}")
+                logger.warning(f"Failed to load YOLO model: {e}")
                 self.use_yolo = False
+        
+        # Device Check
+        self.device = 0 if torch.cuda.is_available() else 'cpu'
+        if self.use_yolo and self.device == 0:
+            logger.info(f"ROIDetector using GPU: {torch.cuda.get_device_name(0)}")
 
         # HSV Ranges
         # Neon Green: Bright, High Saturation
@@ -56,7 +66,7 @@ class ROIDetector:
         # 1. YOLO DETECTION (Direct Candidate)
         if self.use_yolo and self.yolo_model:
             # Classes: 62=TV, 63=Laptop (COCO)
-            results = self.yolo_model(frame, verbose=False, classes=[62, 63])
+            results = self.yolo_model(frame, verbose=False, classes=[62, 63], device=self.device)
             
             for result in results:
                 for box in result.boxes:
@@ -65,7 +75,7 @@ class ROIDetector:
                     h = y2 - y1
                     area = w * h
                     # Add as candidate
-                    print(f"DEBUG: YOLO Found Board-like Object ({w}x{h})")
+                    # print(f"DEBUG: YOLO Found Board-like Object ({w}x{h})")
                     candidates.append((x1, y1, w, h, area))
 
         # 2. COLOR DETECTION (Tape/Chalk)
@@ -133,14 +143,18 @@ class TeacherDetector:
         self.model = YOLO(model_path)
         self.locked_id = None # ID of the tracked teacher
         self.ref_hist = None  # Visual Memory (Histogram)
+        self.ref_height = None # Reference Height (pixels) for validation
         self.missing_frames = 0
+        self.device = 0 if torch.cuda.is_available() else 'cpu'
+        if self.device == 0:
+             logger.info(f"TeacherDetector using GPU: {torch.cuda.get_device_name(0)}")
         
     def set_reference_teacher(self, frame, box):
         """
         Locks onto the ID AND Appearance of the person closest to the provided box.
         """
         # We need to run tracking on this frame to get IDs
-        results = self.model.track(frame, verbose=False, classes=[0], persist=True)
+        results = self.model.track(frame, verbose=False, classes=[0], persist=True, device=self.device)
         
         target_cx = (box[0] + box[2]) / 2
         target_cy = (box[1] + box[3]) / 2
@@ -163,36 +177,43 @@ class TeacherDetector:
                 if dist < min_dist:
                     min_dist = dist
                     best_id = ids[i]
-                    best_box = map(int, b)
+                    best_box = map(int, b) # x1, y1, x2, y2
         
-        if min_dist < 200 and best_box is not None:
+        # Relaxed threshold for initial lock
+        if min_dist < 500 and best_box is not None:
             self.locked_id = best_id
             self.missing_frames = 0
             
-            # --- CAPTURE VISUAL MEMORY ---
-            bx1, by1, bx2, by2 = best_box
+            # --- CAPTURE VISUAL & SPATIAL MEMORY ---
+            bx1, by1, bx2, by2 = list(best_box)
+            self.ref_height = by2 - by1 # Store Height
+            
             person_roi = frame[by1:by2, bx1:bx2]
             if person_roi.size > 0:
                  hsv_roi = cv2.cvtColor(person_roi, cv2.COLOR_BGR2HSV)
                  hist = cv2.calcHist([hsv_roi], [0, 1], None, [30, 32], [0, 180, 0, 256])
                  cv2.normalize(hist, hist, 0, 255, cv2.NORM_MINMAX)
                  self.ref_hist = hist
-                 print(f"Teacher Locked! ID: #{self.locked_id} | Visual Memory: Saved")
+                 logger.info(f"Teacher Locked! ID: #{self.locked_id} | H: {self.ref_height}px | Visual Memory: Saved")
             else:
-                 print(f"Teacher Locked! ID: #{self.locked_id} | Visual Memory: FAILED (Empty ROI)")
+                 logger.warning(f"Teacher Locked! ID: #{self.locked_id} | Visual Memory: FAILED (Empty ROI)")
             
             return True
         else:
-            print("Failed to match Teacher ID.")
+            logger.warning(f"Lock Failed. Min Dist: {min_dist:.1f}")
             return False
 
     def detect_teacher(self, frame, board_rois=None):
+        # Backward compatibility wrapper
+        box, _ = self.detect_teacher_with_debug(frame, board_rois)
+        return box
+
+    def detect_teacher_with_debug(self, frame, board_rois=None):
         """
-        Returns bounding box [x1, y1, x2, y2] of the teacher.
-        Uses model.track() to maintain ID across frames.
+        Returns (bounding box [x1, y1, x2, y2], debug_info_dict)
         """
         # Run Tracking
-        results = self.model.track(frame, verbose=False, classes=[0], persist=True)
+        results = self.model.track(frame, verbose=False, classes=[0], persist=True, device=self.device)
         
         candidates = []
         for result in results:
@@ -210,38 +231,59 @@ class TeacherDetector:
                 h = y2 - y1
                 area = w * h
                 tid = ids[i]
-                candidates.append((x1, y1, x2, y2, area, tid))
+                candidates.append((x1, y1, w, h, area, tid))
+        
+        debug_info = {"candidates": candidates}
         
         # --- MODE 1: ID LOCK ---
         if self.locked_id is not None:
             for cand in candidates:
                 if cand[5] == self.locked_id:
-                    self.missing_frames = 0 # Reset counter
-                    return cand[:4]
+                    self.missing_frames = 0
+                    x, y, w, h = cand[:4]
+                    # Update ref_height dynamically if matched? No, keep original as baseline or moving avg?
+                    # Let's keep original to avoid drift to seated students.
+                    return [x, y, x+w, y+h], debug_info
             
             # Locked ID not found
             self.missing_frames += 1
-            if self.missing_frames > 150: # 5s lost
-                print(f"Teacher #{self.locked_id} lost. Switching to VISUAL SEARCH.")
+            if self.missing_frames > config.vision.locked_teacher_timeout_frames:
+                logger.info(f"Teacher #{self.locked_id} lost. Switching to VISUAL SEARCH.")
                 self.locked_id = None
                 self.missing_frames = 0
-                # Fall through to Visual Search (ref_hist is still set)
             else:
-                return None # Waiting for ID to return
+                return None, debug_info
         
-        # --- MODE 2: VISUAL SEARCH (Re-Acquire) ---
+        # --- MODE 2: VISUAL + HEIGHT SEARCH (Re-Acquire or Debug) ---
+        # Even if we have a lock, we might want to see the scores for debugging
+        debug_scores = [] 
+        
         if self.ref_hist is not None:
-            # We have a memory, but no active ID. Look for a visual match.
             best_person = None
             max_similarity = -1.0
             best_id_match = None
             
-            for person in candidates:
-                px1, py1, px2, py2, p_area, pid = person
-                if p_area < 2000: continue
+            for i, person in enumerate(candidates):
+                px, py, pw, ph, p_area, pid = person
                 
-                cand_roi = frame[py1:py2, px1:px2]
-                if cand_roi.size == 0: continue
+                # Height Ratio
+                h_ratio = 0.0
+                if self.ref_height:
+                    h_ratio = ph / self.ref_height
+
+                if p_area < 2000: 
+                    debug_scores.append(f"Small")
+                    continue
+                
+                # Bounds check
+                px_c = max(0, px); py_c = max(0, py)
+                px2 = min(frame.shape[1], px+pw)
+                py2 = min(frame.shape[0], py+ph)
+                
+                cand_roi = frame[py_c:py2, px_c:px2]
+                if cand_roi.size == 0: 
+                    debug_scores.append("Empty")
+                    continue
                 
                 hsv_cand = cv2.cvtColor(cand_roi, cv2.COLOR_BGR2HSV)
                 cand_hist = cv2.calcHist([hsv_cand], [0, 1], None, [30, 32], [0, 180, 0, 256])
@@ -249,67 +291,65 @@ class TeacherDetector:
                 
                 similarity = cv2.compareHist(self.ref_hist, cand_hist, cv2.HISTCMP_CORREL)
                 
-                if similarity > max_similarity:
-                    max_similarity = similarity
-                    best_person = (px1, py1, px2, py2)
-                    best_id_match = pid
-            
-            if max_similarity > 0.5: # Strict visual match
-                print(f"Teacher RE-IDENTIFIED! New ID: #{best_id_match} (Sim: {max_similarity:.2f})")
-                self.locked_id = best_id_match
-                return best_person
-            
-            # If we have a memory but no match, DO NOT FALLBACK to spatial.
-            # We want to ignore students walking by until the REAL teacher returns.
-            return None
-            
-        # --- MODE 2: SPATIAL HEURISTIC (Default) ---
-        if not candidates: return None
+                # Penalize Lower Frame (Audience)
+                penalty = 0.0
+                p_cy = py + ph/2
+                if p_cy > frame.shape[0] * (1 - config.vision.upper_frame_percentage):
+                     penalty = config.vision.audience_penalty
+                     similarity -= penalty
+                
+                # Update candidate tuple with Score for manager to draw: (..., pid, score, h_ratio)
+                # We need to modify the candidates list structure in debug_info
+                # Current: (x, y, w, h, area, tid) -> New: (x,y,w,h,area,tid, sim, h_ratio)
+                candidates[i] = (px, py, pw, ph, p_area, pid, similarity, h_ratio)
 
-        if board_rois and len(board_rois) > 0:
-            best_person = None
-            min_dist_score = float('inf')
+                # Logic only if we are searching (Mode 2)
+                if self.locked_id is None:
+                    # Height Filtering
+                    if self.ref_height and ph < (self.ref_height * config.vision.height_ratio_threshold):
+                        continue
+                        
+                    if similarity > max_similarity:
+                        max_similarity = similarity
+                        best_person = [px, py, px+pw, py+ph]
+                        best_id_match = pid
             
-            board_centers_y = [b[1] + b[3]/2 for b in board_rois]
-            avg_board_y = sum(board_centers_y) / len(board_centers_y)
-            
-            for person in candidates:
-                px1, py1, px2, py2, p_area, tid = person
-                p_cy = py1 + (py2 - py1) / 2
+            # Use threshold
+            if self.locked_id is None and max_similarity > config.vision.similarity_threshold:
+                logger.info(f"Teacher RE-IDENTIFIED! New ID: #{best_id_match} (Sim: {max_similarity:.2f})")
+                self.locked_id = best_id_match
+                # We return here, but debug_info is updated by reference in list? No, local list.
+                # Update debug info with enriched candidates
                 
-                total_intersection = 0
-                for (bx, by, bw, bh) in board_rois:
-                    ix = max(px1, bx)
-                    iy = max(py1, by)
-                    iw = min(px2, bx+bw) - ix
-                    ih = min(py2, by+bh) - iy
-                    if iw > 0 and ih > 0:
-                        total_intersection += (iw * ih)
-                
-                if total_intersection > 0:
-                    score = -total_intersection 
-                else:
-                    dist_y = abs(p_cy - avg_board_y)
-                    score = dist_y
-                
-                if score < min_dist_score:
-                    min_dist_score = score
-                    best_person = (px1, py1, px2, py2)
+        debug_info["candidates"] = candidates
+        
+        # --- MODE 1 RETURN (After scoring) ---
+        if self.locked_id is not None:
+             for cand in candidates:
+                 # Check ID (cand[5] is still ID)
+                 if len(cand) > 5 and cand[5] == self.locked_id:
+                     self.missing_frames = 0
+                     x, y, w, h = cand[:4]
+                     return [x, y, x+w, y+h], debug_info
+        
+        # --- MODE 2 RETURN ---
+        if self.locked_id is None and self.ref_hist is not None:
+            if best_person: # Found via visual match loop above
+                 return best_person, debug_info
+            return None, debug_info
+
+        # --- MODE 3: SPATIAL HEURISTIC (No Lock, No Memory) ---
+        if not candidates: return None, debug_info
+        
+        # Priority: Proximity to Boards > Upper Frame > Largest
+        valid_candidates = [c for c in candidates if (c[1] + c[3]/2) < frame.shape[0] * 0.85] # Upper 85%
+        
+        if not valid_candidates: 
+            return None, debug_info
             
-            return best_person
-            
-        else:
-            # Fallback: Largest + Central
-            frame_h = frame.shape[0]
-            valid_candidates = []
-            for p in candidates:
-                cy = p[1] + (p[3] - p[1]) / 2
-                if cy < frame_h * 0.85: 
-                    valid_candidates.append(p)
-            
-            if not valid_candidates: return None
-            valid_candidates.sort(key=lambda x: x[4], reverse=True)
-            return valid_candidates[0][:4]
+        valid_candidates.sort(key=lambda x: x[4], reverse=True) # Sort by Area
+        top = valid_candidates[0]
+        return [top[0], top[1], top[0]+top[2], top[1]+top[3]], debug_info
 
 class BoardMonitor:
     def __init__(self, board_roi):
@@ -338,14 +378,6 @@ class BoardMonitor:
 
         intersection_area = (x_right - x_left) * (y_bottom - y_top)
         
-        # We generally care about how much the TEACHER overlaps the BOARD
-        # But standard IoU is Intersection / Union. The prompt asks for Overlap.
-        # "Calculate how much the Teacher's box overlaps with the Board's ROI."
-        # This usually means Interference. Let's use Intersection / TeacherArea or Intersection / Union.
-        # Let's stick to standard IoU or Intersection / BoardArea to see if board is blocked.
-        # Prompt says: "IF Overlap > 30% -> Status = Writing".
-        # I'll use Intersection / TeacherArea to see if the teacher is "on" the board.
-        
         teacher_area = (t_x2 - t_x1) * (t_y2 - t_y1)
         if teacher_area == 0: return 0
         
@@ -361,7 +393,7 @@ class BoardMonitor:
         
         # HEURISTIC: precise value depends on distance, resolution, etc.
         # Returns True if "Full", False otherwise.
-        print(f"DEBUG: Board Edge Density: {edge_density:.2f}") # Debug info
+        # print(f"DEBUG: Board Edge Density: {edge_density:.2f}") # Debug info
         return edge_density > 2.0 # Lowered from 20 for higher sensitivity
 
     def update(self, frame, teacher_box):

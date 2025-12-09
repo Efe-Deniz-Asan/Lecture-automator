@@ -22,6 +22,11 @@ output/
 .DS_Store
 Thumbs.db
 
-# Secrets
+# Secrets and Environment
 .env
 .api_keys
+
+# State and Logs
+state.json
+*.log
+logs/

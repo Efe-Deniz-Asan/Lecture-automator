@@ -16,7 +16,7 @@ if exist ".venv\Scripts\activate.bat" (
 )
 
 :: Run Calibration (Defaulting to Neon Green, but we can change this)
-python lecture_automator.py calibrate --color neon-green --source 0 --use-yolo
+py -3.11 lecture_automator.py calibrate --color neon-green --source 0 --use-yolo
 
 echo.
 echo Calibration Done.

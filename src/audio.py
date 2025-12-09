@@ -2,13 +2,17 @@ import pyaudio
 import wave
 import threading
 import time
+from src.logger import get_logger
+from src.config import config
+
+logger = get_logger(__name__)
 
 class AudioRecorder:
-    def __init__(self, output_filename="lecture_audio.wav", channels=1, rate=48000, chunk=4096, input_device_index=None):
+    def __init__(self, output_filename="lecture_audio.wav", channels=1, rate=None, chunk=None, input_device_index=None):
         self.output_filename = output_filename
         self.channels = channels
-        self.rate = rate
-        self.chunk = chunk
+        self.rate = rate if rate is not None else config.audio.sample_rate
+        self.chunk = chunk if chunk is not None else config.audio.chunk_size
         self.input_device_index = input_device_index
         self.format = pyaudio.paInt16
         
@@ -28,7 +32,7 @@ class AudioRecorder:
         # Callback function for non-blocking audio capture
         def callback(in_data, frame_count, time_info, status):
             if status:
-                print(f"Audio Status: {status}")
+                logger.warning(f"Audio Status: {status}")
             if not self.is_paused:
                 self.frames.append(in_data)
             return (in_data, pyaudio.paContinue)
@@ -43,9 +47,9 @@ class AudioRecorder:
                                      stream_callback=callback)
             
             self.stream.start_stream()
-            print(f"Audio recording started: {self.output_filename} (Device ID: {self.input_device_index})")
+            logger.info(f"Audio recording started: {self.output_filename} (Device ID: {self.input_device_index})")
         except Exception as e:
-            print(f"Error starting audio stream: {e}")
+            logger.error(f"Error starting audio stream: {e}")
             self.is_recording = False
 
     def _record(self):
@@ -54,17 +58,17 @@ class AudioRecorder:
 
     def pause_recording(self):
         self.is_paused = True
-        print("Audio PAUSED.")
+        logger.info("Audio PAUSED.")
 
     def resume_recording(self):
         self.is_paused = False
-        print("Audio RESUMED.")
+        logger.info("Audio RESUMED.")
 
     def stop_recording(self):
         if not self.is_recording:
             return
         
-        print("Stopping audio recording...")
+        logger.info("Stopping audio recording...")
         self.is_recording = False
         
         if hasattr(self, 'stream') and self.stream.is_active():
@@ -73,11 +77,11 @@ class AudioRecorder:
         
         self.audio.terminate()
         self._save_file()
-        print("Audio recording stopped and saved.")
+        logger.info("Audio recording stopped and saved.")
 
     def _save_file(self):
         if not self.frames:
-            print("Warning: No audio frames captured!")
+            logger.warning("No audio frames captured!")
             return
             
         try:
@@ -87,9 +91,9 @@ class AudioRecorder:
             wf.setframerate(self.rate)
             wf.writeframes(b''.join(self.frames))
             wf.close()
-            print(f"Audio file saved: {self.output_filename}")
+            logger.info(f"Audio file saved: {self.output_filename}")
         except Exception as e:
-            print(f"Error saving audio file: {e}")
+            logger.error(f"Error saving audio file: {e}")
         
     def get_current_duration(self):
         # Calculate duration in seconds based on frames captured

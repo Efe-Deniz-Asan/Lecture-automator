@@ -4,6 +4,11 @@ import time
 import os
 from .vision import ROIDetector, TeacherDetector, BoardMonitor
 from .audio import AudioRecorder
+from .logger import get_logger
+from .config import config
+from .state_manager import state_manager
+
+logger = get_logger(__name__)
 
 class LectureManager:
     def __init__(self, output_dir="output", color_mode="neon-green", audio_device_index=None, use_yolo=False):
@@ -148,20 +153,33 @@ class LectureManager:
 
                         # 2. Detect Teacher (Prioritize those near boards)
                         board_rois = [(m.x, m.y, m.w, m.h) for m in self.board_monitors]
-                        teacher_box = self.teacher_detector.detect_teacher(frame, board_rois)
+                        teacher_box, debug_info = self.teacher_detector.detect_teacher_with_debug(frame, board_rois)
                         
-                        # 3. Update Boards
-                        for idx, monitor in enumerate(self.board_monitors):
-                            triggered = monitor.update(frame, teacher_box)
-                            
-                            if triggered:
-                                print(f"Snapshot Triggered for Board {idx+1}")
-                                self._save_snapshot(frame, idx, monitor)
+                        # DRAW ALL CANDIDATES (Gray) to help user understand who is who
+                        if debug_info and "candidates" in debug_info:
+                            for c in debug_info["candidates"]:
+                                sim_txt = ""
+                                if len(c) >= 8:
+                                    cx, cy, cw, ch, _, cid, score, h_ratio = c
+                                    sim_txt = f"|S:{score:.2f}|H:{h_ratio:.2f}"
+                                else:
+                                    cx, cy, cw, ch, _, cid = c[:6]
 
-                        # Output Debug (Teacher Box)
+                                cv2.rectangle(frame, (cx, cy), (cx+cw, cy+ch), (100, 100, 100), 1)
+                                cv2.putText(frame, f"ID:{cid}{sim_txt}", (cx, cy-5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (100, 100, 100), 1)
+
+                        # DRAW LOCKED TEACHER (Red/Green)
                         if teacher_box:
                             x1, y1, x2, y2 = teacher_box
-                            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                            color = (0, 0, 255) # Red (Default)
+                            status_text = "TEACHER"
+                            
+                            if self.teacher_detector.locked_id is not None:
+                                color = (0, 255, 0) # Green (Locked)
+                                status_text = f"LOCKED #{self.teacher_detector.locked_id}"
+                            
+                            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 3)
+                            cv2.putText(frame, status_text, (x1, y1-10), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
 
                 # Draw Board Regions (Always visible)    
                 for monitor in self.board_monitors:
@@ -205,9 +223,9 @@ class LectureManager:
                     for idx, monitor in enumerate(self.board_monitors):
                         self._save_snapshot(frame, idx, monitor)
 
-                elif key == ord('l'):
-                    # Lock onto current detected teacher
-                    # We need to run detection once here to get the box if not recording
+                elif key == ord('l') or key == ord('L'):
+                    # Lock onto current detected teacher (works with both lowercase and uppercase)
+                    print(f"DEBUG: 'l' or 'L' pressed.")
                     board_rois = [(m.x, m.y, m.w, m.h) for m in self.board_monitors]
                     teacher_box = self.teacher_detector.detect_teacher(frame, board_rois)
                     

@@ -15,7 +15,7 @@ if exist ".venv\Scripts\activate.bat" (
 :: Auto-detects language and uses your Gemini Key. 
 :: Switched to 'turbo' model (Fast & Accurate) and Auto-Device (GPU if available).
 echo Generating Study Guide (Auto-Language) for LATEST Lecture...
-python lecture_automator.py generate --model turbo --device auto --latest
+py -3.11 lecture_automator.py generate --model turbo --device auto --latest
 
 echo.
 echo ===============================================

@@ -2,8 +2,17 @@ import argparse
 import sys
 from src.manager import LectureManager
 from src.generator import ContentGenerator
+from src.logger import get_logger
+from src.config import config
+
+__version__ = "2.0.0"
+logger = get_logger(__name__)
 
 def main():
+    # Display version
+    logger.info(f"Lecture Automator v{__version__}")
+    logger.info(f"Configuration loaded from: config.yaml")
+    
     # AUTO-FIX: Add FFmpeg to PATH if missing (Common issue with Winget installs needing restart)
     import shutil
     import os
@@ -12,7 +21,7 @@ def main():
         local_app_data = os.environ.get("LOCALAPPDATA", "")
         possible_path = os.path.join(local_app_data, "Microsoft", "WinGet", "Packages", "Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe", "ffmpeg-8.0.1-full_build", "bin")
         if os.path.exists(possible_path):
-             print(f"DEBUG: Found FFmpeg locally at {possible_path}. Adding to PATH.")
+             logger.debug(f"Found FFmpeg locally at {possible_path}. Adding to PATH.")
              os.environ["PATH"] += os.pathsep + possible_path
 
     parser = argparse.ArgumentParser(description="Lecture Automator CLI")

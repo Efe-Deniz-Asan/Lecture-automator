@@ -1,0 +1,59 @@
+# Lecture Automator Configuration
+# This file contains all tunable parameters for the system
+
+version: "2.0.0"
+
+# Vision System Settings
+vision:
+  # How many frames to wait before giving up on a lost teacher ID
+  locked_teacher_timeout_frames: 150
+  
+  # Visual similarity threshold for re-identifying teacher (0.0-1.0)
+  similarity_threshold: 0.60
+  
+  # Minimum height ratio for teacher candidates (0.0-1.0)
+  # Teacher must be at least this % of reference height
+  height_ratio_threshold: 0.75
+  
+  # Upper frame percentage where teacher should be (0.0-1.0)
+  # People below this are considered "audience"
+  upper_frame_percentage: 0.85
+  
+  # Penalty for people in lower frame (audience area)
+  audience_penalty: 0.2
+
+# Audio Recording Settings
+audio:
+  # Sample rate in Hz (44100, 48000, etc.)
+  sample_rate: 48000
+  
+  # Chunk size for audio buffer
+  chunk_size: 4096
+  
+  # Audio format (paInt16, paFloat32, etc.)
+  format: "paInt16"
+
+# Recording Session Settings
+recording:
+  # Auto-restart recording if it crashes
+  auto_restart_on_crash: true
+  
+  # Minimum seconds between snapshots (prevents spam)
+  snapshot_cooldown_seconds: 2.0
+  
+  # Auto-save state every N seconds
+  state_save_interval_seconds: 10.0
+
+# Logging Settings
+logging:
+  # Log level: DEBUG, INFO, WARNING, ERROR, CRITICAL
+  level: "INFO"
+  
+  # Log file location
+  file: "logs/lecture_automator.log"
+  
+  # Max log file size before rotation
+  max_bytes: 10485760  # 10MB
+  
+  # Number of backup log files to keep
+  backup_count: 3
