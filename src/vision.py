@@ -1,5 +1,6 @@
 import cv2
 import numpy as np
+import time
 from ultralytics import YOLO
 import torch
 from src.logger import get_logger
@@ -359,6 +360,8 @@ class BoardMonitor:
         self.x, self.y, self.w, self.h = board_roi
         self.state = "Empty" # Empty, Writing, Left, Full
         self.last_status = "Empty"
+        self.intersection_start_time = None  # Track when teacher started writing
+        self.is_valid_session = False  # Track if minimum duration met
         
     def calculate_iou(self, teacher_box):
         if not teacher_box:
@@ -407,16 +410,44 @@ class BoardMonitor:
             
         trigger_snapshot = False
         
+        # Start timing when teacher begins writing
+        if current_status == "Writing" and self.last_status != "Writing":
+            # Teacher just started intersecting
+            self.intersection_start_time = time.time()
+            self.is_valid_session = False
+            logger.debug(f"Board intersection started at {self.intersection_start_time}")
+        
+        # Check if minimum duration has been met
+        if current_status == "Writing" and self.intersection_start_time is not None:
+            duration = time.time() - self.intersection_start_time
+            if duration >= config.recording.min_intersection_duration_seconds:
+                if not self.is_valid_session:  # Only log once when threshold is reached
+                    logger.info(f"Valid writing session detected (duration: {duration:.1f}s >= {config.recording.min_intersection_duration_seconds}s)")
+                self.is_valid_session = True
+        
         # State Transition Logic
-        # IF Status changes from "Writing" to "No Overlap" -> Check Fullness
+        # IF Status changes from "Writing" to "No Overlap" -> Check Fullness (if valid session)
         if self.last_status == "Writing" and current_status == "No Overlap":
             # Teacher just left the board
-            val = self.check_fullness(frame)
-            if val:
-                 trigger_snapshot = True
-                 self.state = "Left_Full"
+            if self.is_valid_session:
+                # Valid writing session - check fullness and potentially trigger snapshot
+                val = self.check_fullness(frame)
+                if val:
+                    trigger_snapshot = True
+                    self.state = "Left_Full"
+                    logger.info("Snapshot triggered after valid writing session")
+                else:
+                    self.state = "Left_NotFull"
+                    logger.debug("Valid session but board not full enough")
             else:
-                 self.state = "Left_NotFull"
+                # Brief intersection - ignore
+                duration = time.time() - self.intersection_start_time if self.intersection_start_time else 0
+                self.state = "Left_TooShort"
+                logger.debug(f"Brief intersection ignored (duration: {duration:.1f}s < {config.recording.min_intersection_duration_seconds}s)")
+            
+            # Reset timer
+            self.intersection_start_time = None
+            self.is_valid_session = False
                  
         self.last_status = current_status
         return trigger_snapshot

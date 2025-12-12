@@ -7,7 +7,7 @@ from src.ocr import BoardOCR
 from src.config import config
 
 class ContentGenerator:
-    def __init__(self, output_dir="output", model_size="base", device="auto", compute_type="default",
+    def __init__(self, output_dir="output", model_size="medium", device="auto", compute_type="default",
                  openai_key=None, gemini_key=None, language=None, skip_transcription=False):
         self.output_dir = output_dir
         self.manifest_path = os.path.join(output_dir, "manifest.json")

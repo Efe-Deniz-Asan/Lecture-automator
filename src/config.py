@@ -42,6 +42,7 @@ class RecordingConfig(ConfigSection):
     auto_restart_on_crash: bool = True
     snapshot_cooldown_seconds: float = 2.0
     state_save_interval_seconds: float = 10.0
+    min_intersection_duration_seconds: float = 7.0  # Minimum time teacher must be at board before snapshot
 
 
 class LoggingConfig(ConfigSection):
