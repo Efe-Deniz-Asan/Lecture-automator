@@ -2,6 +2,7 @@ import cv2
 import json
 import time
 import os
+import shutil
 from .vision import ROIDetector, TeacherDetector, BoardMonitor
 from .audio import AudioRecorder
 from .logger import get_logger
@@ -127,8 +128,30 @@ class LectureManager:
         cap.release()
         cv2.destroyAllWindows()
         return len(self.board_monitors) > 0
+    
+    def _check_disk_space(self, min_gb=1.0):
+        """Check if sufficient disk space available for recording"""
+        try:
+            usage = shutil.disk_usage(self.output_dir)
+            free_gb = usage.free / (1024**3)
+            if free_gb < min_gb:
+                print(f"\n⚠️ WARNING: Low disk space ({free_gb:.1f}GB free)")
+                print(f"   Recommended: At least {min_gb}GB for recording")
+                return False
+            logger.info(f"Disk space OK: {free_gb:.1f}GB available")
+            return True
+        except Exception as e:
+            logger.warning(f"Could not check disk space: {e}")
+            return True  # Proceed anyway if check fails
 
     def start_session(self, frame_source=0):
+        # Check disk space before starting
+        if not self._check_disk_space(min_gb=1.0):
+            response = input("Continue anyway? (y/n): ").strip().lower()
+            if response != 'y':
+                print("Recording cancelled due to low disk space.")
+                return
+        
         # 1. Start Audio - WAITING FOR USER INPUT
         # self.audio_recorder.start_recording()
         # self.start_time = time.time()

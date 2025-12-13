@@ -362,6 +362,7 @@ class BoardMonitor:
         self.last_status = "Empty"
         self.intersection_start_time = None  # Track when teacher started writing
         self.is_valid_session = False  # Track if minimum duration met
+        self.last_snapshot_time = 0  # Track periodic snapshots during continuous writing
         
     def calculate_iou(self, teacher_box):
         if not teacher_box:
@@ -413,17 +414,26 @@ class BoardMonitor:
         # Start timing when teacher begins writing
         if current_status == "Writing" and self.last_status != "Writing":
             # Teacher just started intersecting
-            self.intersection_start_time = time.time()
+            self.intersection_start_time = time.monotonic()  # Use monotonic for clock-independent timing
             self.is_valid_session = False
-            logger.debug(f"Board intersection started at {self.intersection_start_time}")
+            logger.debug(f"Board intersection started")
         
         # Check if minimum duration has been met
         if current_status == "Writing" and self.intersection_start_time is not None:
-            duration = time.time() - self.intersection_start_time
+            duration = time.monotonic() - self.intersection_start_time
             if duration >= config.recording.min_intersection_duration_seconds:
                 if not self.is_valid_session:  # Only log once when threshold is reached
                     logger.info(f"Valid writing session detected (duration: {duration:.1f}s >= {config.recording.min_intersection_duration_seconds}s)")
                 self.is_valid_session = True
+                
+                # Fix #1: Periodic snapshot for continuous writing (every 5 minutes)
+                time_since_snapshot = time.monotonic() - self.last_snapshot_time
+                if time_since_snapshot >= 300:  # 5 minutes
+                    if self.check_fullness(frame):
+                        trigger_snapshot = True
+                        self.last_snapshot_time = time.monotonic()
+                        self.state = "Writing_Snapshot"
+                        logger.info(f"Periodic snapshot triggered (continuous writing for {time_since_snapshot:.0f}s)")
         
         # State Transition Logic
         # IF Status changes from "Writing" to "No Overlap" -> Check Fullness (if valid session)
@@ -441,7 +451,7 @@ class BoardMonitor:
                     logger.debug("Valid session but board not full enough")
             else:
                 # Brief intersection - ignore
-                duration = time.time() - self.intersection_start_time if self.intersection_start_time else 0
+                duration = time.monotonic() - self.intersection_start_time if self.intersection_start_time else 0
                 self.state = "Left_TooShort"
                 logger.debug(f"Brief intersection ignored (duration: {duration:.1f}s < {config.recording.min_intersection_duration_seconds}s)")
             

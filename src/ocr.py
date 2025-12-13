@@ -10,7 +10,13 @@ import json
 try:
     import pytesseract
     from PIL import Image, ImageEnhance
-    TESSERACT_AVAILABLE = True
+    # Verify tesseract executable exists (not just Python package)
+    try:
+        pytesseract.get_tesseract_version()
+        TESSERACT_AVAILABLE = True
+    except pytesseract.TesseractNotFoundError:
+        TESSERACT_AVAILABLE = False
+        print("Warning: Tesseract executable not found. Text OCR disabled.")
 except ImportError:
     TESSERACT_AVAILABLE = False
 

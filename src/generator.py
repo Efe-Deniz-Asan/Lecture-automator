@@ -59,9 +59,12 @@ class ContentGenerator:
 
     def process_session(self):
         if not os.path.exists(self.manifest_path):
-             pass 
-        else:
-             self.renumber_boards_chronologically()
+            print(f"ERROR: Manifest not found: {self.manifest_path}")
+            print("Please run 'record' command first to create a session.")
+            return False
+        
+        self.renumber_boards_chronologically()
+        return True
 
     def renumber_boards_chronologically(self):
         """
@@ -147,6 +150,19 @@ class ContentGenerator:
             detected_language = self.language if self.language else "tr"
             
         else:
+            # Validate audio file exists and has content
+            if not os.path.exists(self.audio_path):
+                print(f"ERROR: Audio file not found: {self.audio_path}")
+                print("Recording may have failed. Cannot transcribe.")
+                return
+            
+            audio_size = os.path.getsize(self.audio_path)
+            if audio_size < 1000:  # Less than 1KB is likely corrupt/empty
+                print(f"ERROR: Audio file too small ({audio_size} bytes), may be corrupt")
+                return
+            
+            print(f"Audio file OK: {audio_size / (1024*1024):.1f} MB")
+            
             lang_msg = self.language if self.language else "Auto-Detect"
             print(f"Transcribing master audio file (Language: {lang_msg})...")
             
@@ -256,7 +272,16 @@ class ContentGenerator:
                     """
                 
                 response = self.gemini_model.generate_content([prompt, img])
-                transcription = response.text
+                
+                # Handle safety blocks and empty responses
+                if not response.parts:
+                    block_reason = getattr(response, 'prompt_feedback', 'Unknown')
+                    print(f"    Warning: Content blocked ({block_reason})")
+                    transcription = "[Image could not be processed]"
+                else:
+                    transcription = response.text
+                    if not transcription or not transcription.strip():
+                        transcription = "[No content extracted from this image]"
                 
                 results.append(f"### Board #{board_id} (Time: {int(timestamp)}s)\n\n{transcription}\n")
                 
@@ -312,7 +337,12 @@ class ContentGenerator:
             elif self.gemini_model:
                 print("Generating content using Google Gemini...")
                 response = self.gemini_model.generate_content(prompt)
-                content = response.text
+                # Handle safety blocks
+                if not response.parts:
+                    print("Warning: Study guide generation blocked by safety filter")
+                    content = "[Content generation was blocked]"
+                else:
+                    content = response.text
             
             # Combine Raw Board Output + AI Summary
             final_output = f"{content}\n\n---\n\n## Raw Board Transcriptions\n\n{board_notes}"

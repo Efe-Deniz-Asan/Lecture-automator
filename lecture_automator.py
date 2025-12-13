@@ -161,9 +161,26 @@ def main():
             
         else:
             parser.print_help()
+            
     except KeyboardInterrupt:
         print("\n\nProgram interrupted by user. Exiting safely...")
         sys.exit(0)
+    except Exception as e:
+        # Fix #6: Global exception handler for startup and runtime errors
+        import traceback
+        logger.critical(f"Application error: {e}")
+        print(f"\n❌ ERROR: {e}")
+        print("\nThis may be caused by:")
+        print("  - Missing dependencies (run: pip install -r requirements.txt)")
+        print("  - Invalid configuration (check config.yaml)")
+        print("  - Hardware issues (camera/microphone not connected)")
+        print("\nFull details saved to: crash_report.txt")
+        with open("crash_report.txt", "w") as f:
+            f.write(f"Lecture Automator Crash Report\n")
+            f.write(f"Time: {datetime.datetime.now()}\n")
+            f.write(f"Error: {e}\n\n")
+            f.write(traceback.format_exc())
+        sys.exit(1)
 
 
 if __name__ == "__main__":

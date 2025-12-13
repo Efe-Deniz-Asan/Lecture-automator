@@ -13,6 +13,13 @@ logger = get_logger(__name__)
 class ConfigSection:
     """Base class for configuration sections"""
     def __init__(self, data: Dict[str, Any]):
+        # Apply class-level defaults first (prevents AttributeError on missing keys)
+        for attr_name in dir(self.__class__):
+            if not attr_name.startswith('_'):
+                default_val = getattr(self.__class__, attr_name)
+                if not callable(default_val):
+                    setattr(self, attr_name, default_val)
+        # Override with provided data from YAML
         for key, value in data.items():
             setattr(self, key, value)
     
