@@ -189,13 +189,55 @@ class LectureManager:
         
         recording_active = False
         is_paused = False
+        last_state_save = time.time()
+        consecutive_read_failures = 0
 
         try:
             while True:
                 ret, frame = cap.read()
-                if not ret: 
-                    print("Error: Camera disconnected or EOF.")
-                    break
+                
+                # Camera reconnection logic
+                if not ret:
+                    consecutive_read_failures += 1
+                    if consecutive_read_failures >= 5:
+                        logger.critical("Camera disconnected - attempting reconnection...")
+                        print("\n⚠️ Camera disconnected! Attempting to reconnect...")
+                        
+                        cap.release()
+                        reconnected = False
+                        for attempt in range(5):
+                            print(f"  Reconnection attempt {attempt + 1}/5...")
+                            time.sleep(2)
+                            cap = cv2.VideoCapture(frame_source)
+                            if cap.isOpened():
+                                ret, frame = cap.read()
+                                if ret:
+                                    print("  ✓ Camera reconnected!")
+                                    logger.info("Camera reconnected successfully")
+                                    reconnected = True
+                                    consecutive_read_failures = 0
+                                    break
+                        
+                        if not reconnected:
+                            print("  ✗ Could not reconnect. Saving progress and exiting...")
+                            logger.critical("Camera reconnection failed after 5 attempts")
+                            break
+                    continue
+                else:
+                    consecutive_read_failures = 0
+                
+                # Periodic state save for crash recovery (every 10 seconds)
+                if recording_active and (time.time() - last_state_save) > 10:
+                    board_rois = [(m.x, m.y, m.w, m.h) for m in self.board_monitors]
+                    session_state = state_manager.create_session_state(
+                        output_dir=self.output_dir,
+                        locked_teacher_id=self.teacher_detector.locked_id,
+                        ref_height=self.teacher_detector.ref_height,
+                        board_rois=board_rois,
+                        audio_device_id=self.audio_device_index
+                    )
+                    state_manager.save(session_state)
+                    last_state_save = time.time()
                 
                 # --- State Handling ---
                 if not recording_active:
@@ -351,10 +393,22 @@ class LectureManager:
         }
         self.manifest.append(entry)
         
-        # Update JSON file incrementally
-        with open(self.manifest_path, 'w') as f:
-            json.dump(self.manifest, f, indent=4)
+        # Atomic write: write to temp file, then rename (prevents corruption on crash)
+        temp_path = self.manifest_path + ".tmp"
+        try:
+            with open(temp_path, 'w') as f:
+                json.dump(self.manifest, f, indent=4)
+                f.flush()
+                os.fsync(f.fileno())  # Force write to disk
+            os.replace(temp_path, self.manifest_path)  # Atomic rename
+        except Exception as e:
+            logger.error(f"Failed to save manifest: {e}")
+            # Fallback to direct write
+            with open(self.manifest_path, 'w') as f:
+                json.dump(self.manifest, f, indent=4)
             
     def stop_session(self):
         self.audio_recorder.stop_recording()
+        # Clear crash recovery state on clean exit
+        state_manager.clear()
         print("Session Ended. Manifest saved.")

@@ -28,13 +28,38 @@ class AudioRecorder:
             
         self.is_recording = True
         self.frames = []
+        self.silent_frames = 0  # Track consecutive silent frames
+        self.last_warning_time = 0
         
         # Callback function for non-blocking audio capture
         def callback(in_data, frame_count, time_info, status):
+            import struct
+            import math
+            
             if status:
                 logger.warning(f"Audio Status: {status}")
             if not self.is_paused:
                 self.frames.append(in_data)
+                
+                # Calculate audio level (RMS) for silence detection
+                try:
+                    samples = struct.unpack(f'{len(in_data)//2}h', in_data)
+                    rms = math.sqrt(sum(s * s for s in samples) / len(samples))
+                    
+                    # Silence threshold (adjust based on mic sensitivity)
+                    if rms < 100:  # Very low audio level
+                        self.silent_frames += 1
+                        # Warn after ~30 seconds of silence (depends on chunk size and rate)
+                        silent_duration = self.silent_frames * self.chunk / self.rate
+                        if silent_duration > 30 and (time.time() - self.last_warning_time) > 60:
+                            logger.warning(f"Audio appears silent for {silent_duration:.0f}s - check microphone!")
+                            print(f"\n⚠️ WARNING: Microphone may be muted or disconnected!")
+                            self.last_warning_time = time.time()
+                    else:
+                        self.silent_frames = 0  # Reset on any sound
+                except:
+                    pass  # Don't crash if calculation fails
+                    
             return (in_data, pyaudio.paContinue)
 
         try:

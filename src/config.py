@@ -99,9 +99,40 @@ class Config:
         self.logging = LoggingConfig(data.get('logging', {}))
         self.ocr = OCRConfig(data.get('ocr', {}))
         
+        # Validate configuration
+        self._validate()
+        
         # Update version if available
         if 'version' in data:
             self.version = data['version']
+    
+    def _validate(self):
+        """Validate configuration values"""
+        errors = []
+        
+        # Audio validation
+        if self.audio.sample_rate < 8000:
+            errors.append(f"audio.sample_rate ({self.audio.sample_rate}) too low, minimum 8000")
+        if self.audio.chunk_size < 256:
+            errors.append(f"audio.chunk_size ({self.audio.chunk_size}) too small, minimum 256")
+        
+        # Recording validation
+        if self.recording.min_intersection_duration_seconds < 0:
+            errors.append("recording.min_intersection_duration_seconds cannot be negative")
+        if self.recording.snapshot_cooldown_seconds < 0:
+            errors.append("recording.snapshot_cooldown_seconds cannot be negative")
+        
+        # Vision validation
+        if not (0 <= self.vision.similarity_threshold <= 1):
+            errors.append(f"vision.similarity_threshold ({self.vision.similarity_threshold}) must be 0-1")
+        
+        # OCR validation
+        if self.ocr.parallel_workers < 1:
+            errors.append("ocr.parallel_workers must be at least 1")
+        
+        # Log errors but don't crash (graceful degradation)
+        for err in errors:
+            logger.warning(f"Config validation: {err}")
     
     def save(self):
         """Save current configuration to file"""
