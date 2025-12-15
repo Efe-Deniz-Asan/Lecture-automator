@@ -1,4 +1,16 @@
 @echo off
+REM ------------------------------------------------------------------------------
+REM  Copyright (c) 2025 Efe Deniz Asan
+REM  All Rights Reserved.
+REM
+REM  NOTICE:  All information contained herein is, and remains the property of
+REM  Efe Deniz Asan. The intellectual and technical concepts contained herein
+REM  are proprietary to Efe Deniz Asan and are protected by trade secret or
+REM  copyright law. Dissemination of this information or reproduction of this
+REM  material is strictly forbidden unless prior written permission is obtained
+REM  from Efe Deniz Asan.
+REM ------------------------------------------------------------------------------
+
 echo Starting Lecture Automator (Generation Mode)...
 echo ===============================================
 
