@@ -80,3 +80,8 @@ If you already have a transcript and just want to re-generate the study guide:
 ## Troubleshooting
 - **FFmpeg not found**: Ensure FFmpeg is installed and added to your system PATH. Restart your terminal after installing.
 - **Camera issues**: Verify your camera source index (default is 0). You can change it with `--source 1`.
+
+- ---
+## License & Copyright
+**© 2025 Efe Deniz Asan. All Rights Reserved.**
+This software is proprietary. It is not open source. Access to this repository does not grant any rights to use, modify, or distribute the code.
