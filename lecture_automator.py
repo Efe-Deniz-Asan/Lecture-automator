@@ -1,13 +1,18 @@
 # ------------------------------------------------------------------------------
 #  Copyright (c) 2025 Efe Deniz Asan
-#  All Rights Reserved.
 #
-#  NOTICE:  All information contained herein is, and remains the property of
-#  Efe Deniz Asan. The intellectual and technical concepts contained herein
-#  are proprietary to Efe Deniz Asan and are protected by trade secret or
-#  copyright law. Dissemination of this information or reproduction of this
-#  material is strictly forbidden unless prior written permission is obtained
-#  from Efe Deniz Asan.
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU Affero General Public License as published
+#  by the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Affero General Public License for more details.
+#
+#  You should have received a copy of the GNU Affero General Public License
+#  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 # ------------------------------------------------------------------------------
 
 import argparse
