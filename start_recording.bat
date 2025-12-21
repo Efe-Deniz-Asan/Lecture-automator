@@ -1,19 +1,14 @@
 @echo off
 REM ------------------------------------------------------------------------------
 REM  Copyright (c) 2025 Efe Deniz Asan
+REM  All Rights Reserved.
 REM
-REM  This program is free software: you can redistribute it and/or modify
-REM  it under the terms of the GNU Affero General Public License as published
-REM  by the Free Software Foundation, either version 3 of the License, or
-REM  (at your option) any later version.
-REM
-REM  This program is distributed in the hope that it will be useful,
-REM  but WITHOUT ANY WARRANTY; without even the implied warranty of
-REM  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-REM  GNU Affero General Public License for more details.
-REM
-REM  You should have received a copy of the GNU Affero General Public License
-REM  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+REM  NOTICE:  All information contained herein is, and remains the property of
+REM  Efe Deniz Asan. The intellectual and technical concepts contained herein
+REM  are proprietary to Efe Deniz Asan and are protected by trade secret or
+REM  copyright law. Dissemination of this information or reproduction of this
+REM  material is strictly forbidden unless prior written permission is obtained
+REM  from Efe Deniz Asan.
 REM ------------------------------------------------------------------------------
 
 echo Starting Lecture Automator (Recording Mode)...
