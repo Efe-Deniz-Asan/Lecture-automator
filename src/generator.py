@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------------
-#  Copyright (c) 2025 Efe Deniz Asan
+#  Copyright (c) 2025 Efe Deniz Asan <asan.efe.deniz@gmail.com>
 #  All Rights Reserved.
 #
 #  NOTICE:  All information contained herein is, and remains the property of
@@ -7,7 +7,7 @@
 #  are proprietary to Efe Deniz Asan and are protected by trade secret or
 #  copyright law. Dissemination of this information or reproduction of this
 #  material is strictly forbidden unless prior written permission is obtained
-#  from Efe Deniz Asan.
+#  from Efe Deniz Asan or via email at <asan.efe.deniz@gmail.com>.
 # ------------------------------------------------------------------------------
 
 import json
